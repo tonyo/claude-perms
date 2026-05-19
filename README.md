@@ -70,28 +70,55 @@ claude-perms compile --dry-run perms.yaml
 | `(a\|b\|c)` | Alternation | One rule per branch |
 | `(foo)?` | Optional group | Rules with and without the group |
 | `*` | Glob wildcard | Passed through as-is |
+| `{{name}}` | Macro reference | Replaced with the macro's value before expansion |
 
 Groups can be nested: `(git (push|pull)|npm) *`
 
 A bare `?` not following a group is treated as a literal character.
+
+## Macros
+
+Macros let you define a pattern fragment once and reuse it across multiple rules. Define them under a top-level `macros:` key, then reference with `{{name}}`:
+
+```yaml
+macros:
+  git_read: "status|log|diff|show"
+  git_write: "push|reset|clean"
+
+permissions:
+  allow:
+    bash:
+      - "git ({{git_read}}) *"
+      - "git ({{git_read}}) --cached *"
+  deny:
+    bash:
+      - "git ({{git_write}}) *"
+```
+
+Macro values are validated at compile time — unclosed parentheses or other syntax errors are caught before any rules are written. Referencing an undefined macro is also an error.
+
+Macros cannot reference other macros.
 
 ## Example
 
 `perms.yaml`:
 
 ```yaml
-# Safe read-only git commands
+macros:
+  git_read: "status|log|diff|show|branch|stash"
+  git_danger: "push|reset|clean|checkout"
+
 permissions:
   allow:
     bash:
-      - "git (status|log|diff|show|branch|stash) *"
+      - "git ({{git_read}}) *"
       - "git commit (--amend)? *"
       - "npm (run|exec) *"
       - "(ls|cat|head|tail|grep|wc) *"
 
   deny:
     bash:
-      - "git (push|reset|clean|checkout) *"
+      - "git ({{git_danger}}) *"
       - "(rm|sudo|curl|wget) *"
 ```
 
