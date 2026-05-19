@@ -1,0 +1,16 @@
+[tools]
+go = "1.26.1"
+golangci-lint = "2.12.2"
+pre-commit = "4.6.0"
+
+[tasks.build]
+description = "Build the binary"
+run = "go build -o claude-perms ."
+
+[tasks.test]
+description = "Run the test suite"
+run = "go test ./..."
+
+[tasks.lint]
+description = "Run linter"
+run = "golangci-lint run"

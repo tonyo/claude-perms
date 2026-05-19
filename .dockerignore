@@ -1,0 +1,5 @@
+.git
+.claude
+claude-perms
+*.md
+*_test.go
