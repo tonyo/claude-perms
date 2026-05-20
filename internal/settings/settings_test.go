@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,7 +155,7 @@ func TestWrite_Atomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	// No .tmp file should remain
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
+	if _, err := os.Stat(path + ".tmp"); !errors.Is(err, os.ErrNotExist) {
 		t.Error("temp file was not cleaned up")
 	}
 }

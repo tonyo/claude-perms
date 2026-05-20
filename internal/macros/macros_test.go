@@ -141,9 +141,9 @@ func TestInterpolate(t *testing.T) {
 
 func TestInterpolateAll(t *testing.T) {
 	t.Run("all valid", func(t *testing.T) {
-		macros := map[string]string{"read": "status|log"}
+		m := map[string]string{"read": "status|log"}
 		patterns := []string{"git ({{read}}) *", "git ({{read}}) --cached *"}
-		got, err := InterpolateAll(patterns, macros)
+		got, err := InterpolateAll(patterns, m)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

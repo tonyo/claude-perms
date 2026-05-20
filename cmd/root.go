@@ -44,7 +44,7 @@ func newCompileCmd() *cobra.Command {
 		Short: "Compile YAML into Claude Code settings.json",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCompile(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), args[0], scope, output, dryRun, force)
+			return runCompile(cmd.InOrStdin(), cmd.OutOrStdout(), args[0], scope, output, dryRun, force)
 		},
 	}
 	cmd.Flags().StringVar(&scope, "scope", "project", "Settings scope: project, user, local")
@@ -54,30 +54,22 @@ func newCompileCmd() *cobra.Command {
 	return cmd
 }
 
-func runCompile(in io.Reader, out, errOut io.Writer, yamlPath, scope, outputFlag string, dryRun, force bool) error {
-	pf, err := yamlconf.Load(yamlPath)
-	if err != nil {
-		return fmt.Errorf("load yaml: %w", err)
-	}
+type preparedPerms struct {
+	Allow []string
+	Deny  []string
+}
 
-	if err := macros.Validate(pf.Macros); err != nil {
+func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, dryRun, force bool) error {
+	perms, err := loadPermissions(yamlPath)
+	if err != nil {
 		return err
 	}
 
-	allowPatterns, err := macros.InterpolateAll(pf.Permissions.Allow.Bash, pf.Macros)
-	if err != nil {
-		return fmt.Errorf("interpolate allow rules: %w", err)
-	}
-	denyPatterns, err := macros.InterpolateAll(pf.Permissions.Deny.Bash, pf.Macros)
-	if err != nil {
-		return fmt.Errorf("interpolate deny rules: %w", err)
-	}
-
-	allowRules, err := expandPatterns(allowPatterns)
+	allowRules, err := expandPatterns(perms.Allow)
 	if err != nil {
 		return fmt.Errorf("expand allow rules: %w", err)
 	}
-	denyRules, err := expandPatterns(denyPatterns)
+	denyRules, err := expandPatterns(perms.Deny)
 	if err != nil {
 		return fmt.Errorf("expand deny rules: %w", err)
 	}
@@ -148,31 +140,18 @@ func newCheckCmd() *cobra.Command {
 }
 
 func runCheck(out, errOut io.Writer, yamlPath string) error {
-	pf, err := yamlconf.Load(yamlPath)
+	perms, err := loadPermissions(yamlPath)
 	if err != nil {
-		return fmt.Errorf("load yaml: %w", err)
-	}
-
-	if err := macros.Validate(pf.Macros); err != nil {
 		return err
-	}
-
-	allowPatterns, err := macros.InterpolateAll(pf.Permissions.Allow.Bash, pf.Macros)
-	if err != nil {
-		return fmt.Errorf("interpolate allow rules: %w", err)
-	}
-	denyPatterns, err := macros.InterpolateAll(pf.Permissions.Deny.Bash, pf.Macros)
-	if err != nil {
-		return fmt.Errorf("interpolate deny rules: %w", err)
 	}
 
 	hasErr := false
 
 	fmt.Fprintln(out, "Allow rules:")
-	if len(allowPatterns) == 0 {
+	if len(perms.Allow) == 0 {
 		fmt.Fprintln(out, "  (none)")
 	}
-	for _, p := range allowPatterns {
+	for _, p := range perms.Allow {
 		expanded, err := expand.Expand(p)
 		if err != nil {
 			fmt.Fprintf(errOut, "  ERROR: %q: %v\n", p, err)
@@ -185,10 +164,10 @@ func runCheck(out, errOut io.Writer, yamlPath string) error {
 	}
 
 	fmt.Fprintln(out, "\nDeny rules:")
-	if len(denyPatterns) == 0 {
+	if len(perms.Deny) == 0 {
 		fmt.Fprintln(out, "  (none)")
 	}
-	for _, p := range denyPatterns {
+	for _, p := range perms.Deny {
 		expanded, err := expand.Expand(p)
 		if err != nil {
 			fmt.Fprintf(errOut, "  ERROR: %q: %v\n", p, err)
@@ -204,6 +183,25 @@ func runCheck(out, errOut io.Writer, yamlPath string) error {
 		return fmt.Errorf("one or more patterns failed to expand")
 	}
 	return nil
+}
+
+func loadPermissions(yamlPath string) (*preparedPerms, error) {
+	pf, err := yamlconf.Load(yamlPath)
+	if err != nil {
+		return nil, fmt.Errorf("load yaml: %w", err)
+	}
+	if err := macros.Validate(pf.Macros); err != nil {
+		return nil, err
+	}
+	allow, err := macros.InterpolateAll(pf.Permissions.Allow.Bash, pf.Macros)
+	if err != nil {
+		return nil, fmt.Errorf("interpolate allow rules: %w", err)
+	}
+	deny, err := macros.InterpolateAll(pf.Permissions.Deny.Bash, pf.Macros)
+	if err != nil {
+		return nil, fmt.Errorf("interpolate deny rules: %w", err)
+	}
+	return &preparedPerms{Allow: allow, Deny: deny}, nil
 }
 
 func expandPatterns(patterns []string) ([]string, error) {

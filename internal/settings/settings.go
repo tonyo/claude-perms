@@ -3,6 +3,7 @@ package settings
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ type CompiledPermissions struct {
 // If the file does not exist, an empty map is returned with no error.
 func ReadRaw(path string) (map[string]json.RawMessage, error) {
 	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return map[string]json.RawMessage{}, nil
 	}
 	if err != nil {

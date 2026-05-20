@@ -174,7 +174,7 @@ permissions:
     bash: []
 `)
 	outPath := filepath.Join(t.TempDir(), "settings.json")
-	err := runCompile(strings.NewReader(""), &strings.Builder{}, &strings.Builder{},
+	err := runCompile(strings.NewReader(""), &strings.Builder{},
 		yaml, "project", outPath, false, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -198,7 +198,7 @@ permissions:
     bash:
       - "git ({{bad}}) *"
 `)
-	err := runCompile(strings.NewReader(""), &strings.Builder{}, &strings.Builder{},
+	err := runCompile(strings.NewReader(""), &strings.Builder{},
 		yaml, "project", filepath.Join(t.TempDir(), "s.json"), false, true)
 	if err == nil {
 		t.Error("expected error for invalid macro")
@@ -276,7 +276,7 @@ permissions:
 `)
 	outPath := filepath.Join(t.TempDir(), "settings.json")
 	var out strings.Builder
-	err := runCompile(strings.NewReader(""), &out, &strings.Builder{},
+	err := runCompile(strings.NewReader(""), &out,
 		yaml, "project", outPath, false /*dryRun*/, true /*force*/)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -311,7 +311,7 @@ permissions:
       - "ls *"
 `)
 	var out strings.Builder
-	err := runCompile(strings.NewReader(""), &out, &strings.Builder{},
+	err := runCompile(strings.NewReader(""), &out,
 		yaml, "project", outPath, false, true /*force*/)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -344,7 +344,7 @@ permissions:
       - "ls *"
 `)
 	var out strings.Builder
-	err := runCompile(strings.NewReader("n\n"), &out, &strings.Builder{},
+	err := runCompile(strings.NewReader("n\n"), &out,
 		yaml, "project", outPath, false, false /*force*/)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -365,7 +365,7 @@ permissions:
     bash:
       - "ls *"
 `)
-	err := runCompile(strings.NewReader("y\n"), &strings.Builder{}, &strings.Builder{},
+	err := runCompile(strings.NewReader("y\n"), &strings.Builder{},
 		yaml, "project", outPath, false, false /*force*/)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -382,7 +382,7 @@ permissions:
     bash:
       - "git (unclosed"
 `)
-	err := runCompile(strings.NewReader(""), &strings.Builder{}, &strings.Builder{},
+	err := runCompile(strings.NewReader(""), &strings.Builder{},
 		yaml, "project", filepath.Join(t.TempDir(), "s.json"), false, true)
 	if err == nil {
 		t.Error("expected error for invalid pattern")

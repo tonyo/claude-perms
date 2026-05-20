@@ -19,8 +19,7 @@ permissions:
       - "(rm|sudo) *"
 `)
 	var out strings.Builder
-	var errOut strings.Builder
-	err := runCompile(strings.NewReader(""), &out, &errOut, yaml, "project", "", true /*dryRun*/, false)
+	err := runCompile(strings.NewReader(""), &out, yaml, "project", "", true /*dryRun*/, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,7 +38,7 @@ permissions:
     bash: []
 `)
 	var out strings.Builder
-	err := runCompile(strings.NewReader(""), &out, &strings.Builder{}, yaml, "project", "", true, false)
+	err := runCompile(strings.NewReader(""), &out, yaml, "project", "", true, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,7 +48,7 @@ permissions:
 func TestCompileDryRun_NoPermissions_NoPanic(t *testing.T) {
 	yaml := writeTempYAML(t, `{}`)
 	var out strings.Builder
-	err := runCompile(strings.NewReader(""), &out, &strings.Builder{}, yaml, "project", "", true, false)
+	err := runCompile(strings.NewReader(""), &out, yaml, "project", "", true, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -247,10 +247,6 @@ func TestExpand(t *testing.T) {
 			if !reflect.DeepEqual(sorted(got), sorted(tt.want)) {
 				t.Errorf("Expand(%q)\n  got  %v\n  want %v", tt.pattern, got, tt.want)
 			}
-			// Also verify count matches (catches duplicates)
-			if len(got) != len(tt.want) {
-				t.Errorf("Expand(%q) len = %d, want %d", tt.pattern, len(got), len(tt.want))
-			}
 		})
 	}
 }
