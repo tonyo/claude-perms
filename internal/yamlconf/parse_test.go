@@ -146,6 +146,151 @@ permissions:
 	}
 }
 
+func TestLoad_DictItem(t *testing.T) {
+	path := writeTemp(t, `
+permissions:
+  allow:
+    bash:
+      - git:
+          log:
+            - "*"
+`)
+	pf, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pf.Permissions.Allow.Bash) != 1 || pf.Permissions.Allow.Bash[0] != "git log *" {
+		t.Errorf("got %v, want [git log *]", pf.Permissions.Allow.Bash)
+	}
+}
+
+func TestLoad_DictItemMultipleKeys(t *testing.T) {
+	path := writeTemp(t, `
+permissions:
+  allow:
+    bash:
+      - git:
+          status:
+            - "*"
+          log:
+            - "*"
+`)
+	pf, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pf.Permissions.Allow.Bash) != 2 {
+		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow.Bash), pf.Permissions.Allow.Bash)
+	}
+}
+
+func TestLoad_DictItemDeepNesting(t *testing.T) {
+	path := writeTemp(t, `
+permissions:
+  allow:
+    bash:
+      - git:
+          submodule:
+            update:
+              - "--init *"
+`)
+	pf, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pf.Permissions.Allow.Bash) != 1 || pf.Permissions.Allow.Bash[0] != "git submodule update --init *" {
+		t.Errorf("got %v, want [git submodule update --init *]", pf.Permissions.Allow.Bash)
+	}
+}
+
+func TestLoad_MixedStringAndDict(t *testing.T) {
+	path := writeTemp(t, `
+permissions:
+  allow:
+    bash:
+      - "npm run *"
+      - git:
+          status:
+            - "*"
+`)
+	pf, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pf.Permissions.Allow.Bash) != 2 {
+		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow.Bash), pf.Permissions.Allow.Bash)
+	}
+	if pf.Permissions.Allow.Bash[0] != "npm run *" {
+		t.Errorf("got[0] = %q, want \"npm run *\"", pf.Permissions.Allow.Bash[0])
+	}
+	if pf.Permissions.Allow.Bash[1] != "git status *" {
+		t.Errorf("got[1] = %q, want \"git status *\"", pf.Permissions.Allow.Bash[1])
+	}
+}
+
+func TestLoad_DictItemEmptyLeaf(t *testing.T) {
+	path := writeTemp(t, `
+permissions:
+  allow:
+    bash:
+      - git:
+          status: []
+`)
+	pf, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pf.Permissions.Allow.Bash) != 0 {
+		t.Errorf("expected empty rules for empty leaf, got %v", pf.Permissions.Allow.Bash)
+	}
+}
+
+func TestLoad_DictItemAlternationInLeaf(t *testing.T) {
+	path := writeTemp(t, `
+permissions:
+  allow:
+    bash:
+      - git:
+          log:
+            - "(--oneline|--stat) *"
+`)
+	pf, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pf.Permissions.Allow.Bash) != 1 || pf.Permissions.Allow.Bash[0] != "git log (--oneline|--stat) *" {
+		t.Errorf("got %v", pf.Permissions.Allow.Bash)
+	}
+}
+
+func TestLoad_MultipleDictItems(t *testing.T) {
+	path := writeTemp(t, `
+permissions:
+  allow:
+    bash:
+      - git:
+          log:
+            - "*"
+      - docker:
+          compose:
+            up:
+              - "*"
+`)
+	pf, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pf.Permissions.Allow.Bash) != 2 {
+		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow.Bash), pf.Permissions.Allow.Bash)
+	}
+	if pf.Permissions.Allow.Bash[0] != "git log *" {
+		t.Errorf("got[0] = %q", pf.Permissions.Allow.Bash[0])
+	}
+	if pf.Permissions.Allow.Bash[1] != "docker compose up *" {
+		t.Errorf("got[1] = %q", pf.Permissions.Allow.Bash[1])
+	}
+}
+
 func TestLoad_CommentsIgnored(t *testing.T) {
 	path := writeTemp(t, `
 # this is a comment
