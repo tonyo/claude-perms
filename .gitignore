@@ -1,0 +1,14 @@
+# Built binary
+claude-perms
+
+# Go
+*.test
+*.out
+coverage.out
+cpu.prof
+mem.prof
+
+# Temp / OS
+*.tmp
+*.swp
+.DS_Store
