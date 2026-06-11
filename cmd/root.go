@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tonyo/claude-perms/internal/diff"
@@ -54,9 +56,14 @@ func newCompileCmd() *cobra.Command {
 	return cmd
 }
 
+type taggedPattern struct {
+	Tool    string
+	Pattern string
+}
+
 type preparedPerms struct {
-	Allow []string
-	Deny  []string
+	Allow []taggedPattern
+	Deny  []taggedPattern
 }
 
 func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, dryRun, force bool) error {
@@ -65,18 +72,18 @@ func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string,
 		return err
 	}
 
-	allowRules, err := expandPatterns(perms.Allow)
+	allowRules, err := buildRules(perms.Allow)
 	if err != nil {
 		return fmt.Errorf("expand allow rules: %w", err)
 	}
-	denyRules, err := expandPatterns(perms.Deny)
+	denyRules, err := buildRules(perms.Deny)
 	if err != nil {
 		return fmt.Errorf("expand deny rules: %w", err)
 	}
 
 	compiled := settings.CompiledPermissions{
-		Allow: wrapBash(allowRules),
-		Deny:  wrapBash(denyRules),
+		Allow: allowRules,
+		Deny:  denyRules,
 	}
 
 	if dryRun {
@@ -147,37 +154,28 @@ func runCheck(out, errOut io.Writer, yamlPath string) error {
 
 	hasErr := false
 
-	fmt.Fprintln(out, "Allow rules:")
-	if len(perms.Allow) == 0 {
-		fmt.Fprintln(out, "  (none)")
-	}
-	for _, p := range perms.Allow {
-		expanded, err := expand.Expand(p)
-		if err != nil {
-			fmt.Fprintf(errOut, "  ERROR: %q: %v\n", p, err)
-			hasErr = true
-			continue
+	printRules := func(label string, patterns []taggedPattern) {
+		fmt.Fprintln(out, label)
+		if len(patterns) == 0 {
+			fmt.Fprintln(out, "  (none)")
+			return
 		}
-		for _, e := range expanded {
-			fmt.Fprintf(out, "  Bash(%s)\n", e)
+		for _, tp := range patterns {
+			expanded, err := expand.Expand(tp.Pattern)
+			if err != nil {
+				fmt.Fprintf(errOut, "  ERROR: %q: %v\n", tp.Pattern, err)
+				hasErr = true
+				continue
+			}
+			for _, e := range expanded {
+				fmt.Fprintf(out, "  %s(%s)\n", tp.Tool, e)
+			}
 		}
 	}
 
-	fmt.Fprintln(out, "\nDeny rules:")
-	if len(perms.Deny) == 0 {
-		fmt.Fprintln(out, "  (none)")
-	}
-	for _, p := range perms.Deny {
-		expanded, err := expand.Expand(p)
-		if err != nil {
-			fmt.Fprintf(errOut, "  ERROR: %q: %v\n", p, err)
-			hasErr = true
-			continue
-		}
-		for _, e := range expanded {
-			fmt.Fprintf(out, "  Bash(%s)\n", e)
-		}
-	}
+	printRules("Allow rules:", perms.Allow)
+	fmt.Fprintln(out)
+	printRules("Deny rules:", perms.Deny)
 
 	if hasErr {
 		return fmt.Errorf("one or more patterns failed to expand")
@@ -193,15 +191,64 @@ func loadPermissions(yamlPath string) (*preparedPerms, error) {
 	if err := macros.Validate(pf.Macros); err != nil {
 		return nil, err
 	}
-	allow, err := macros.InterpolateAll(pf.Permissions.Allow.Bash, pf.Macros)
+	allow, err := collectTagged(pf.Permissions.Allow, pf.Macros)
 	if err != nil {
 		return nil, fmt.Errorf("interpolate allow rules: %w", err)
 	}
-	deny, err := macros.InterpolateAll(pf.Permissions.Deny.Bash, pf.Macros)
+	deny, err := collectTagged(pf.Permissions.Deny, pf.Macros)
 	if err != nil {
 		return nil, fmt.Errorf("interpolate deny rules: %w", err)
 	}
 	return &preparedPerms{Allow: allow, Deny: deny}, nil
+}
+
+func collectTagged(rules yamlconf.ToolRules, macroMap map[string]string) ([]taggedPattern, error) {
+	keys := make([]string, 0, len(rules))
+	for k := range rules {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var out []taggedPattern
+	for _, key := range keys {
+		toolName, err := resolveToolName(key)
+		if err != nil {
+			return nil, err
+		}
+		interpolated, err := macros.InterpolateAll(rules[key], macroMap)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range interpolated {
+			out = append(out, taggedPattern{Tool: toolName, Pattern: p})
+		}
+	}
+	return out, nil
+}
+
+func resolveToolName(key string) (string, error) {
+	switch key {
+	case "bash":
+		return "Bash", nil
+	case "powershell":
+		return "PowerShell", nil
+	case "read":
+		return "Read", nil
+	case "edit":
+		return "Edit", nil
+	case "write":
+		return "Write", nil
+	case "webfetch":
+		return "WebFetch", nil
+	case "agent":
+		return "Agent", nil
+	case "cd":
+		return "Cd", nil
+	}
+	if strings.HasPrefix(key, "mcp__") {
+		return key, nil
+	}
+	return "", fmt.Errorf("unknown tool %q (valid: bash, powershell, read, edit, write, webfetch, agent, cd, mcp__<server>)", key)
 }
 
 func expandPatterns(patterns []string) ([]string, error) {
@@ -216,15 +263,24 @@ func expandPatterns(patterns []string) ([]string, error) {
 	return out, nil
 }
 
-func wrapBash(patterns []string) []string {
-	if len(patterns) == 0 {
-		return nil
-	}
+func wrapTool(tool string, patterns []string) []string {
 	out := make([]string, len(patterns))
 	for i, p := range patterns {
-		out[i] = "Bash(" + p + ")"
+		out[i] = tool + "(" + p + ")"
 	}
 	return out
+}
+
+func buildRules(tagged []taggedPattern) ([]string, error) {
+	var out []string
+	for _, tp := range tagged {
+		expanded, err := expand.Expand(tp.Pattern)
+		if err != nil {
+			return nil, fmt.Errorf("pattern %q: %w", tp.Pattern, err)
+		}
+		out = append(out, wrapTool(tp.Tool, expanded)...)
+	}
+	return out, nil
 }
 
 func resolveSettingsPath(scope, outputFlag string) (string, error) {

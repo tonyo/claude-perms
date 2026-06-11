@@ -34,14 +34,14 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 2 {
-		t.Errorf("allow bash: got %d rules, want 2", len(pf.Permissions.Allow.Bash))
+	if len(pf.Permissions.Allow["bash"]) != 2 {
+		t.Errorf("allow bash: got %d rules, want 2", len(pf.Permissions.Allow["bash"]))
 	}
-	if pf.Permissions.Allow.Bash[0] != "git (status|log) *" {
-		t.Errorf("allow[0] = %q", pf.Permissions.Allow.Bash[0])
+	if pf.Permissions.Allow["bash"][0] != "git (status|log) *" {
+		t.Errorf("allow[0] = %q", pf.Permissions.Allow["bash"][0])
 	}
-	if len(pf.Permissions.Deny.Bash) != 1 {
-		t.Errorf("deny bash: got %d rules, want 1", len(pf.Permissions.Deny.Bash))
+	if len(pf.Permissions.Deny["bash"]) != 1 {
+		t.Errorf("deny bash: got %d rules, want 1", len(pf.Permissions.Deny["bash"]))
 	}
 }
 
@@ -57,10 +57,10 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 0 {
+	if len(pf.Permissions.Allow["bash"]) != 0 {
 		t.Errorf("expected empty allow list")
 	}
-	if len(pf.Permissions.Deny.Bash) != 0 {
+	if len(pf.Permissions.Deny["bash"]) != 0 {
 		t.Errorf("expected empty deny list")
 	}
 }
@@ -76,10 +76,10 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 1 {
-		t.Errorf("allow bash: got %d rules, want 1", len(pf.Permissions.Allow.Bash))
+	if len(pf.Permissions.Allow["bash"]) != 1 {
+		t.Errorf("allow bash: got %d rules, want 1", len(pf.Permissions.Allow["bash"]))
 	}
-	if len(pf.Permissions.Deny.Bash) != 0 {
+	if len(pf.Permissions.Deny["bash"]) != 0 {
 		t.Errorf("deny bash should be empty")
 	}
 }
@@ -95,11 +95,11 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 0 {
+	if len(pf.Permissions.Allow["bash"]) != 0 {
 		t.Errorf("allow bash should be empty")
 	}
-	if len(pf.Permissions.Deny.Bash) != 1 {
-		t.Errorf("deny bash: got %d rules, want 1", len(pf.Permissions.Deny.Bash))
+	if len(pf.Permissions.Deny["bash"]) != 1 {
+		t.Errorf("deny bash: got %d rules, want 1", len(pf.Permissions.Deny["bash"]))
 	}
 }
 
@@ -109,7 +109,7 @@ func TestLoad_EmptyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 0 || len(pf.Permissions.Deny.Bash) != 0 {
+	if len(pf.Permissions.Allow["bash"]) != 0 || len(pf.Permissions.Deny["bash"]) != 0 {
 		t.Errorf("expected all empty for empty file")
 	}
 }
@@ -141,8 +141,8 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 2 {
-		t.Errorf("allow bash: got %d rules, want 2", len(pf.Permissions.Allow.Bash))
+	if len(pf.Permissions.Allow["bash"]) != 2 {
+		t.Errorf("allow bash: got %d rules, want 2", len(pf.Permissions.Allow["bash"]))
 	}
 }
 
@@ -159,8 +159,8 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 1 || pf.Permissions.Allow.Bash[0] != "git log *" {
-		t.Errorf("got %v, want [git log *]", pf.Permissions.Allow.Bash)
+	if len(pf.Permissions.Allow["bash"]) != 1 || pf.Permissions.Allow["bash"][0] != "git log *" {
+		t.Errorf("got %v, want [git log *]", pf.Permissions.Allow["bash"])
 	}
 }
 
@@ -179,8 +179,8 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 2 {
-		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow.Bash), pf.Permissions.Allow.Bash)
+	if len(pf.Permissions.Allow["bash"]) != 2 {
+		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow["bash"]), pf.Permissions.Allow["bash"])
 	}
 }
 
@@ -198,8 +198,8 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 1 || pf.Permissions.Allow.Bash[0] != "git submodule update --init *" {
-		t.Errorf("got %v, want [git submodule update --init *]", pf.Permissions.Allow.Bash)
+	if len(pf.Permissions.Allow["bash"]) != 1 || pf.Permissions.Allow["bash"][0] != "git submodule update --init *" {
+		t.Errorf("got %v, want [git submodule update --init *]", pf.Permissions.Allow["bash"])
 	}
 }
 
@@ -217,14 +217,14 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 2 {
-		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow.Bash), pf.Permissions.Allow.Bash)
+	if len(pf.Permissions.Allow["bash"]) != 2 {
+		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow["bash"]), pf.Permissions.Allow["bash"])
 	}
-	if pf.Permissions.Allow.Bash[0] != "npm run *" {
-		t.Errorf("got[0] = %q, want \"npm run *\"", pf.Permissions.Allow.Bash[0])
+	if pf.Permissions.Allow["bash"][0] != "npm run *" {
+		t.Errorf("got[0] = %q, want \"npm run *\"", pf.Permissions.Allow["bash"][0])
 	}
-	if pf.Permissions.Allow.Bash[1] != "git status *" {
-		t.Errorf("got[1] = %q, want \"git status *\"", pf.Permissions.Allow.Bash[1])
+	if pf.Permissions.Allow["bash"][1] != "git status *" {
+		t.Errorf("got[1] = %q, want \"git status *\"", pf.Permissions.Allow["bash"][1])
 	}
 }
 
@@ -240,8 +240,8 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 0 {
-		t.Errorf("expected empty rules for empty leaf, got %v", pf.Permissions.Allow.Bash)
+	if len(pf.Permissions.Allow["bash"]) != 0 {
+		t.Errorf("expected empty rules for empty leaf, got %v", pf.Permissions.Allow["bash"])
 	}
 }
 
@@ -258,8 +258,8 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 1 || pf.Permissions.Allow.Bash[0] != "git log (--oneline|--stat) *" {
-		t.Errorf("got %v", pf.Permissions.Allow.Bash)
+	if len(pf.Permissions.Allow["bash"]) != 1 || pf.Permissions.Allow["bash"][0] != "git log (--oneline|--stat) *" {
+		t.Errorf("got %v", pf.Permissions.Allow["bash"])
 	}
 }
 
@@ -280,14 +280,40 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 2 {
-		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow.Bash), pf.Permissions.Allow.Bash)
+	if len(pf.Permissions.Allow["bash"]) != 2 {
+		t.Fatalf("got %d rules, want 2: %v", len(pf.Permissions.Allow["bash"]), pf.Permissions.Allow["bash"])
 	}
-	if pf.Permissions.Allow.Bash[0] != "git log *" {
-		t.Errorf("got[0] = %q", pf.Permissions.Allow.Bash[0])
+	if pf.Permissions.Allow["bash"][0] != "git log *" {
+		t.Errorf("got[0] = %q", pf.Permissions.Allow["bash"][0])
 	}
-	if pf.Permissions.Allow.Bash[1] != "docker compose up *" {
-		t.Errorf("got[1] = %q", pf.Permissions.Allow.Bash[1])
+	if pf.Permissions.Allow["bash"][1] != "docker compose up *" {
+		t.Errorf("got[1] = %q", pf.Permissions.Allow["bash"][1])
+	}
+}
+
+func TestLoad_MultipleTools(t *testing.T) {
+	path := writeTemp(t, `
+permissions:
+  allow:
+    bash:
+      - "git status *"
+    read:
+      - "./src/**"
+    mcp__puppeteer:
+      - "*"
+`)
+	pf, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := pf.Permissions.Allow["bash"]; len(got) != 1 || got[0] != "git status *" {
+		t.Errorf("bash: got %v", got)
+	}
+	if got := pf.Permissions.Allow["read"]; len(got) != 1 || got[0] != "./src/**" {
+		t.Errorf("read: got %v", got)
+	}
+	if got := pf.Permissions.Allow["mcp__puppeteer"]; len(got) != 1 || got[0] != "*" {
+		t.Errorf("mcp__puppeteer: got %v", got)
 	}
 }
 
@@ -304,7 +330,7 @@ permissions:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(pf.Permissions.Allow.Bash) != 1 {
-		t.Errorf("allow bash: got %d rules, want 1", len(pf.Permissions.Allow.Bash))
+	if len(pf.Permissions.Allow["bash"]) != 1 {
+		t.Errorf("allow bash: got %d rules, want 1", len(pf.Permissions.Allow["bash"]))
 	}
 }

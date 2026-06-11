@@ -410,3 +410,101 @@ func TestExpandPatterns_AllValid(t *testing.T) {
 		t.Errorf("expected 3 expanded patterns, got %d: %v", len(got), got)
 	}
 }
+
+// ── multi-tool support ───────────────────────────────────────────────────────
+
+func TestRunCheck_MultipleTools(t *testing.T) {
+	yaml := writeTempYAML(t, `
+permissions:
+  allow:
+    bash:
+      - "git status *"
+    read:
+      - "./src/**"
+    webfetch:
+      - "domain:example.com"
+  deny:
+    bash: []
+`)
+	var out strings.Builder
+	if err := runCheck(&out, &strings.Builder{}, yaml); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Bash(git status *)",
+		"Read(./src/**)",
+		"WebFetch(domain:example.com)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunCheck_MCPTool(t *testing.T) {
+	yaml := writeTempYAML(t, `
+permissions:
+  allow:
+    mcp__puppeteer:
+      - "*"
+  deny: {}
+`)
+	var out strings.Builder
+	if err := runCheck(&out, &strings.Builder{}, yaml); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "mcp__puppeteer(*)") {
+		t.Errorf("expected mcp__puppeteer(*) in output, got:\n%s", out.String())
+	}
+}
+
+func TestRunCheck_UnknownTool(t *testing.T) {
+	yaml := writeTempYAML(t, `
+permissions:
+  allow:
+    bask:
+      - "git status *"
+`)
+	err := runCheck(&strings.Builder{}, &strings.Builder{}, yaml)
+	if err == nil {
+		t.Error("expected error for unknown tool")
+	}
+	if !strings.Contains(err.Error(), "bask") {
+		t.Errorf("error should mention the bad key, got: %v", err)
+	}
+}
+
+func TestRunCompile_MultipleTools(t *testing.T) {
+	yaml := writeTempYAML(t, `
+permissions:
+  allow:
+    bash:
+      - "git status *"
+    read:
+      - "./src/**"
+    mcp__puppeteer:
+      - "*"
+  deny:
+    write:
+      - "/etc/**"
+`)
+	outPath := filepath.Join(t.TempDir(), "settings.json")
+	err := runCompile(strings.NewReader(""), &strings.Builder{},
+		yaml, "project", outPath, false, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, _ := os.ReadFile(outPath)
+	body := string(data)
+	for _, want := range []string{
+		"Bash(git status *)",
+		"Read(./src/**)",
+		"mcp__puppeteer(*)",
+		"Write(/etc/**)",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected %q in output file, got:\n%s", want, body)
+		}
+	}
+}

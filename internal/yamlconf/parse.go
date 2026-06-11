@@ -18,23 +18,20 @@ type PermissionRules struct {
 	Deny  ToolRules `yaml:"deny"`
 }
 
-type ToolRules struct {
-	Bash []string
-}
+type ToolRules map[string][]string
 
 func (tr *ToolRules) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.MappingNode {
 		return fmt.Errorf("expected mapping, got kind %d", value.Kind)
 	}
+	*tr = make(ToolRules)
 	for i := 0; i+1 < len(value.Content); i += 2 {
-		if value.Content[i].Value == "bash" {
-			patterns, err := flattenNode("", value.Content[i+1])
-			if err != nil {
-				return err
-			}
-			tr.Bash = patterns
-			return nil
+		key := value.Content[i].Value
+		patterns, err := flattenNode("", value.Content[i+1])
+		if err != nil {
+			return err
 		}
+		(*tr)[key] = patterns
 	}
 	return nil
 }
