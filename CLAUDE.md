@@ -10,6 +10,15 @@ go test ./...                    # run all tests
 go test ./... -coverprofile=...  # with coverage
 ```
 
+## Releasing
+
+```bash
+git tag v<major>.<minor>.<patch>
+git push origin v<major>.<minor>.<patch>
+```
+
+Pushing a `v*` tag triggers `.github/workflows/release.yml`, which builds binaries for linux/amd64, darwin/amd64, darwin/arm64, and windows/amd64, uploads them to a GitHub release, and attaches a `checksums.txt`.
+
 ## Architecture
 
 ```
