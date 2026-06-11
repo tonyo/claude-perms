@@ -161,7 +161,7 @@ func runCheck(out, errOut io.Writer, yamlPath string) error {
 			return
 		}
 		for _, tp := range patterns {
-			expanded, err := expand.Expand(tp.Pattern)
+			expanded, err := expandNormalized(tp.Pattern)
 			if err != nil {
 				fmt.Fprintf(errOut, "  ERROR: %q: %v\n", tp.Pattern, err)
 				hasErr = true
@@ -271,10 +271,21 @@ func wrapTool(tool string, patterns []string) []string {
 	return out
 }
 
+func expandNormalized(pattern string) ([]string, error) {
+	out, err := expand.Expand(pattern)
+	if err != nil {
+		return nil, err
+	}
+	for i, e := range out {
+		out[i] = expand.NormalizeSpaces(e)
+	}
+	return out, nil
+}
+
 func buildRules(tagged []taggedPattern) ([]string, error) {
 	var out []string
 	for _, tp := range tagged {
-		expanded, err := expand.Expand(tp.Pattern)
+		expanded, err := expandNormalized(tp.Pattern)
 		if err != nil {
 			return nil, fmt.Errorf("pattern %q: %w", tp.Pattern, err)
 		}

@@ -508,3 +508,25 @@ permissions:
 		}
 	}
 }
+
+func TestRunCheck_NormalizeSpaces(t *testing.T) {
+	// "(--amend)?" expands to "" producing "git commit  *" (double space)
+	// after normalization it should be "git commit *"
+	yaml := writeTempYAML(t, `
+permissions:
+  allow:
+    bash:
+      - "git commit (--amend)? *"
+`)
+	var out strings.Builder
+	if err := runCheck(&out, &strings.Builder{}, yaml); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, "Bash(git commit  *)") {
+		t.Errorf("double space not normalized in output:\n%s", got)
+	}
+	if !strings.Contains(got, "Bash(git commit *)") {
+		t.Errorf("expected normalized rule in output, got:\n%s", got)
+	}
+}
