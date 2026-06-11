@@ -33,14 +33,13 @@ permissions:
 ```bash
 # macOS (Apple Silicon)
 curl -L https://github.com/tonyo/claude-perms/releases/latest/download/claude-perms-darwin-arm64 -o claude-perms
-chmod +x claude-perms && sudo mv claude-perms /usr/local/bin/
 
 # macOS (Intel)
 curl -L https://github.com/tonyo/claude-perms/releases/latest/download/claude-perms-darwin-amd64 -o claude-perms
-chmod +x claude-perms && sudo mv claude-perms /usr/local/bin/
 
 # Linux
 curl -L https://github.com/tonyo/claude-perms/releases/latest/download/claude-perms-linux-amd64 -o claude-perms
+
 chmod +x claude-perms && sudo mv claude-perms /usr/local/bin/
 ```
 
