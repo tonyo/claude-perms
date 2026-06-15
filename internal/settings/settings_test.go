@@ -117,6 +117,29 @@ func TestMergePermissions_EmptyLists(t *testing.T) {
 	}
 }
 
+func TestMergePermissions_PreservesUnknownPermissionKeys(t *testing.T) {
+	raw := map[string]json.RawMessage{
+		"permissions": json.RawMessage(`{"additionalDirectories":["/tmp"],"allow":["Bash(old *)"]}`),
+	}
+	p := CompiledPermissions{Allow: []string{"Bash(new *)"}}
+	if err := MergePermissions(raw, p); err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal(raw["permissions"], &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["additionalDirectories"]; !ok {
+		t.Error("additionalDirectories was removed from permissions")
+	}
+	var allow []string
+	json.Unmarshal(got["allow"], &allow)
+	if len(allow) != 1 || allow[0] != "Bash(new *)" {
+		t.Errorf("unexpected allow: %v", allow)
+	}
+}
+
 func TestCurrentPermissionsJSON_Missing(t *testing.T) {
 	raw := map[string]json.RawMessage{}
 	got := CurrentPermissionsJSON(raw)

@@ -31,9 +31,37 @@ func ReadRaw(path string) (map[string]json.RawMessage, error) {
 	return raw, nil
 }
 
-// MergePermissions replaces the "permissions" key in raw with the compiled value.
+// MergePermissions updates the "permissions" key in raw with the compiled
+// allow/deny values, preserving any other keys already present in the
+// permissions object (e.g. additionalDirectories).
 func MergePermissions(raw map[string]json.RawMessage, p CompiledPermissions) error {
-	encoded, err := json.Marshal(p)
+	// Start from the existing permissions object so unknown keys are preserved.
+	perms := map[string]json.RawMessage{}
+	if existing, ok := raw["permissions"]; ok {
+		if err := json.Unmarshal(existing, &perms); err != nil {
+			return fmt.Errorf("parse existing permissions: %w", err)
+		}
+	}
+
+	for _, field := range []struct {
+		key  string
+		vals []string
+	}{
+		{"allow", p.Allow},
+		{"deny", p.Deny},
+	} {
+		if len(field.vals) == 0 {
+			delete(perms, field.key)
+			continue
+		}
+		encoded, err := json.Marshal(field.vals)
+		if err != nil {
+			return err
+		}
+		perms[field.key] = json.RawMessage(encoded)
+	}
+
+	encoded, err := json.Marshal(perms)
 	if err != nil {
 		return err
 	}
