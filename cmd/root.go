@@ -17,10 +17,11 @@ import (
 	"github.com/tonyo/claude-perms/internal/yamlconf"
 )
 
-func NewRootCmd() *cobra.Command {
+func NewRootCmd(version string) *cobra.Command {
 	root := &cobra.Command{
-		Use:   "claude-perms",
-		Short: "Claude Code permissions YAML compiler",
+		Use:     "claude-perms",
+		Version: version,
+		Short:   "Claude Code permissions YAML compiler",
 		Long: `Compiles a YAML permissions file into the permissions block
 of a Claude Code settings.json file.
 
