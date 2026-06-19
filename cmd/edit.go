@@ -3,8 +3,10 @@ package cmd
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +55,10 @@ func newEditCmd() *cobra.Command {
 
 func runEdit(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, force bool, openEditor func(string) error) error {
 	_, statErr := os.Stat(yamlPath)
-	isNew := os.IsNotExist(statErr)
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return statErr
+	}
+	isNew := errors.Is(statErr, os.ErrNotExist)
 
 	tmpPath, err := makeTempCopy(yamlPath)
 	if err != nil {
@@ -170,7 +175,7 @@ func makeTempCopy(src string) (string, error) {
 	var content []byte
 	if data, err := os.ReadFile(src); err == nil {
 		content = data
-	} else if os.IsNotExist(err) {
+	} else if errors.Is(err, os.ErrNotExist) {
 		content = []byte(emptyYAMLTemplate)
 	} else {
 		return "", fmt.Errorf("read %s: %w", src, err)
@@ -195,7 +200,11 @@ func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0o644)
+	mode := fs.FileMode(0o644)
+	if fi, err := os.Stat(dst); err == nil {
+		mode = fi.Mode()
+	}
+	return os.WriteFile(dst, data, mode)
 }
 
 func validateAndBuild(yamlPath string) (allowRules, denyRules []string, err error) {
