@@ -33,6 +33,7 @@ Pattern syntax:
 	}
 	root.AddCommand(newCompileCmd())
 	root.AddCommand(newCheckCmd())
+	root.AddCommand(newEditCmd())
 	return root
 }
 
@@ -50,7 +51,7 @@ func newCompileCmd() *cobra.Command {
 			return runCompile(cmd.InOrStdin(), cmd.OutOrStdout(), args[0], scope, output, dryRun, force)
 		},
 	}
-	cmd.Flags().StringVar(&scope, "scope", "project", "Settings scope: project, user, local")
+	cmd.Flags().StringVar(&scope, "scope", "user", "Settings scope: project, user, local")
 	cmd.Flags().StringVar(&output, "output", "", "Explicit output path (overrides --scope)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print result to stdout without writing")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")

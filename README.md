@@ -60,15 +60,24 @@ go build -o claude-perms .
 ## Usage
 
 ```bash
+# Open ~/.claude/perms.yaml in your editor, validate, diff, and write on confirm
+claude-perms edit
+
+# Edit a specific file
+claude-perms edit path/to/perms.yaml
+
+# Edit the project-scoped file (.claude/perms.yaml → .claude/settings.json)
+claude-perms edit --scope project
+
 # Preview what rules would be generated
 claude-perms check perms.yaml
 
-# Compile into .claude/settings.json (shows diff, prompts before writing)
+# Compile into ~/.claude/settings.json (shows diff, prompts before writing)
 claude-perms compile perms.yaml
 
 # Other scopes
-claude-perms compile --scope user perms.yaml   # ~/.claude/settings.json
-claude-perms compile --scope local perms.yaml  # .claude/settings.local.json
+claude-perms compile --scope project perms.yaml  # .claude/settings.json
+claude-perms compile --scope local perms.yaml    # .claude/settings.local.json
 
 # Explicit output path
 claude-perms compile --output path/to/settings.json perms.yaml
@@ -197,7 +206,7 @@ Deny rules:
   Write(~/**)
 ```
 
-`claude-perms compile --force perms.yaml` writes the expanded rules into `.claude/settings.json`, leaving all other keys (model, theme, etc.) untouched.
+`claude-perms compile --force perms.yaml` writes the expanded rules into `~/.claude/settings.json`, leaving all other keys (model, theme, etc.) untouched.
 
 ## How it works
 
