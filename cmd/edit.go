@@ -17,7 +17,17 @@ import (
 	"github.com/tonyo/claude-perms/internal/settings"
 )
 
-const emptyYAMLTemplate = `permissions:
+const emptyYAMLTemplate = `# claude-perms permissions file
+# Run: claude-perms compile [this-file] to apply to Claude Code settings.json
+#
+# Pattern syntax:
+#   (a|b|c)   alternation — expands to one rule per branch
+#   (foo)?    optional group — expands with and without the group
+#   *         glob wildcard
+#
+# Tool keys: bash, read, edit, write, webfetch, agent, cd, mcp__<server>
+
+permissions:
   allow:
     bash: []
   deny:
