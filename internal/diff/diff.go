@@ -44,19 +44,55 @@ func Display(oldText, newText string, w io.Writer) {
 	}
 }
 
-// Prompt writes "Overwrite? [y/N] " to w, reads a line from r,
-// and returns true if the user answered "y" or "Y".
-func Prompt(r io.Reader, w io.Writer) (bool, error) {
-	fmt.Fprint(w, "Overwrite? [y/N] ")
-	scanner := bufio.NewScanner(r)
-	if scanner.Scan() {
-		answer := strings.TrimSpace(scanner.Text())
-		return strings.ToLower(answer) == "y", nil
+// Action is the result of a Prompt call.
+type Action int
+
+const (
+	ActionNo   Action = iota // user declined (default) — zero value is the safe default
+	ActionYes                // user confirmed overwrite
+	ActionEdit               // user wants to open the YAML in an editor
+)
+
+// NewScanner wraps r in a bufio.Scanner suitable for passing to Prompt.
+// Callers that loop over multiple Prompt calls must create one scanner and
+// reuse it; creating a new scanner each call loses bytes buffered internally.
+func NewScanner(r io.Reader) *bufio.Scanner {
+	return bufio.NewScanner(r)
+}
+
+// Prompt runs an interactive overwrite prompt on s, looping until the user
+// gives a definitive answer. d redisplays the diff; e returns ActionEdit to
+// the caller; ? shows the option list.
+func Prompt(s *bufio.Scanner, w io.Writer, oldText, newText string) (Action, error) {
+	for {
+		fmt.Fprint(w, "Overwrite? [y/N/d/e/?] ")
+		if !s.Scan() {
+			if err := s.Err(); err != nil {
+				return ActionNo, err
+			}
+			return ActionNo, nil // EOF → default No
+		}
+		switch strings.ToLower(strings.TrimSpace(s.Text())) {
+		case "y":
+			return ActionYes, nil
+		case "n", "":
+			return ActionNo, nil
+		case "d":
+			fmt.Fprintln(w)
+			Display(oldText, newText, w)
+			fmt.Fprintln(w)
+		case "e":
+			return ActionEdit, nil
+		case "?":
+			fmt.Fprintln(w, "  y  apply changes")
+			fmt.Fprintln(w, "  n  abort, keep current (default)")
+			fmt.Fprintln(w, "  d  redisplay diff")
+			fmt.Fprintln(w, "  e  open YAML in $EDITOR and recompile")
+			fmt.Fprintln(w, "  ?  show this help")
+		default:
+			fmt.Fprintln(w, "  (type ? for help)")
+		}
 	}
-	if err := scanner.Err(); err != nil {
-		return false, err
-	}
-	return false, nil // EOF → default No
 }
 
 func isTerminal(w io.Writer) bool {

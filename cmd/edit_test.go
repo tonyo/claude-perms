@@ -252,3 +252,41 @@ func TestRunEdit_InvalidScope_ReturnsError(t *testing.T) {
 		t.Fatal("expected error for invalid scope")
 	}
 }
+
+func TestRunEdit_PromptRedisplay(t *testing.T) {
+	// d redisplays the diff, then y confirms
+	dir := t.TempDir()
+	yamlPath := writeTempYAML(t, validYAML)
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	var out strings.Builder
+	err := runEdit(strings.NewReader("d\ny\n"), &out, yamlPath, "project", settingsPath, false, fakeEditor(validYAML))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(settingsPath); err != nil {
+		t.Errorf("expected settings.json written after d+y: %v", err)
+	}
+}
+
+func TestRunEdit_PromptEdit_ReOpensEditor(t *testing.T) {
+	// e re-opens the editor (edits to validYAMLAlt), then y confirms
+	dir := t.TempDir()
+	yamlPath := writeTempYAML(t, validYAML)
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	edit := multiEditor(fakeEditor(validYAML), fakeEditor(validYAMLAlt))
+
+	var out strings.Builder
+	err := runEdit(strings.NewReader("e\ny\n"), &out, yamlPath, "project", settingsPath, false, edit)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(settingsPath); err != nil {
+		t.Errorf("expected settings.json written: %v", err)
+	}
+	data, _ := os.ReadFile(settingsPath)
+	if !strings.Contains(string(data), "Bash(git log)") {
+		t.Errorf("expected rule from second edit in settings, got:\n%s", data)
+	}
+}

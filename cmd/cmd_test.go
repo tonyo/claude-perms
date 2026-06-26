@@ -175,7 +175,7 @@ permissions:
 `)
 	outPath := filepath.Join(t.TempDir(), "settings.json")
 	err := runCompile(strings.NewReader(""), &strings.Builder{},
-		yaml, "project", outPath, false, true)
+		yaml, "project", outPath, false, true, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -199,7 +199,7 @@ permissions:
       - "git ({{bad}}) *"
 `)
 	err := runCompile(strings.NewReader(""), &strings.Builder{},
-		yaml, "project", filepath.Join(t.TempDir(), "s.json"), false, true)
+		yaml, "project", filepath.Join(t.TempDir(), "s.json"), false, true, nil)
 	if err == nil {
 		t.Error("expected error for invalid macro")
 	}
@@ -277,7 +277,7 @@ permissions:
 	outPath := filepath.Join(t.TempDir(), "settings.json")
 	var out strings.Builder
 	err := runCompile(strings.NewReader(""), &out,
-		yaml, "project", outPath, false /*dryRun*/, true /*force*/)
+		yaml, "project", outPath, false /*dryRun*/, true /*force*/, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -312,7 +312,7 @@ permissions:
 `)
 	var out strings.Builder
 	err := runCompile(strings.NewReader(""), &out,
-		yaml, "project", outPath, false, true /*force*/)
+		yaml, "project", outPath, false, true /*force*/, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -345,7 +345,7 @@ permissions:
 `)
 	var out strings.Builder
 	err := runCompile(strings.NewReader("n\n"), &out,
-		yaml, "project", outPath, false, false /*force*/)
+		yaml, "project", outPath, false, false /*force*/, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -366,7 +366,7 @@ permissions:
       - "ls *"
 `)
 	err := runCompile(strings.NewReader("y\n"), &strings.Builder{},
-		yaml, "project", outPath, false, false /*force*/)
+		yaml, "project", outPath, false, false /*force*/, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -383,9 +383,82 @@ permissions:
       - "git (unclosed"
 `)
 	err := runCompile(strings.NewReader(""), &strings.Builder{},
-		yaml, "project", filepath.Join(t.TempDir(), "s.json"), false, true)
+		yaml, "project", filepath.Join(t.TempDir(), "s.json"), false, true, nil)
 	if err == nil {
 		t.Error("expected error for invalid pattern")
+	}
+}
+
+func TestRunCompile_EditAction_ReloadsYAML(t *testing.T) {
+	// e → editor rewrites YAML with a new rule → y writes the updated result
+	// and copies the edited content back to the original YAML file.
+	originalContent := `
+permissions:
+  allow:
+    bash:
+      - "ls *"
+`
+	yamlPath := writeTempYAML(t, originalContent)
+	outPath := filepath.Join(t.TempDir(), "settings.json")
+
+	fakeEditor := func(path string) error {
+		return os.WriteFile(path, []byte(`
+permissions:
+  allow:
+    bash:
+      - "git status *"
+`), 0o644)
+	}
+
+	err := runCompile(strings.NewReader("e\ny\n"), &strings.Builder{},
+		yamlPath, "project", outPath, false, false, fakeEditor)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, _ := os.ReadFile(outPath)
+	if !strings.Contains(string(data), "Bash(git status *)") {
+		t.Errorf("expected reloaded rule in settings, got:\n%s", data)
+	}
+	// the edited YAML is committed to the original file on confirm
+	yamlData, _ := os.ReadFile(yamlPath)
+	if !strings.Contains(string(yamlData), "git status") {
+		t.Errorf("expected YAML to be updated on confirm, got:\n%s", yamlData)
+	}
+}
+
+func TestRunCompile_EditAction_Decline_DoesNotModifyYAML(t *testing.T) {
+	// e → editor rewrites temp copy → n → original YAML must be untouched
+	originalContent := `
+permissions:
+  allow:
+    bash:
+      - "ls *"
+`
+	yamlPath := writeTempYAML(t, originalContent)
+	outPath := filepath.Join(t.TempDir(), "settings.json")
+
+	fakeEditor := func(path string) error {
+		return os.WriteFile(path, []byte(`
+permissions:
+  allow:
+    bash:
+      - "git status *"
+`), 0o644)
+	}
+
+	err := runCompile(strings.NewReader("e\nn\n"), &strings.Builder{},
+		yamlPath, "project", outPath, false, false, fakeEditor)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// settings must not be written
+	if _, statErr := os.Stat(outPath); statErr == nil {
+		t.Error("settings.json should not have been written after declining")
+	}
+	// original YAML must be unchanged
+	yamlData, _ := os.ReadFile(yamlPath)
+	if strings.Contains(string(yamlData), "git status") {
+		t.Errorf("original YAML must not be modified on decline, got:\n%s", yamlData)
 	}
 }
 
@@ -491,7 +564,7 @@ permissions:
 `)
 	outPath := filepath.Join(t.TempDir(), "settings.json")
 	err := runCompile(strings.NewReader(""), &strings.Builder{},
-		yaml, "project", outPath, false, true)
+		yaml, "project", outPath, false, true, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

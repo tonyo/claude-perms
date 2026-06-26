@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tonyo/claude-perms/internal/diff"
-	"github.com/tonyo/claude-perms/internal/editor"
 	"github.com/tonyo/claude-perms/internal/settings"
 )
 
@@ -34,7 +33,7 @@ permissions:
     bash: []
 `
 
-func newEditCmd() *cobra.Command {
+func newEditCmd(openEditor func(string) error) *cobra.Command {
 	var scope string
 	var output string
 	var force bool
@@ -54,7 +53,7 @@ func newEditCmd() *cobra.Command {
 				}
 				yamlPath = filepath.Join(filepath.Dir(targetPath), "perms.yaml")
 			}
-			return runEdit(cmd.InOrStdin(), cmd.OutOrStdout(), yamlPath, scope, output, force, editor.Open)
+			return runEdit(cmd.InOrStdin(), cmd.OutOrStdout(), yamlPath, scope, output, force, openEditor)
 		},
 	}
 	cmd.Flags().StringVar(&scope, "scope", "user", "Settings scope: project, user, local")
@@ -88,14 +87,14 @@ func runEdit(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, fo
 	oldJSON := settings.CurrentPermissionsJSON(raw)
 
 	// One scanner shared across all prompt reads to avoid double-buffering.
-	scanner := bufio.NewScanner(in)
+	scanner := diff.NewScanner(in)
 
 	for {
 		if err := openEditor(tmpPath); err != nil {
 			return err
 		}
 
-		allowRules, denyRules, err := validateAndBuild(tmpPath)
+		compiled, err := compileYAML(tmpPath)
 		if err != nil {
 			fmt.Fprintf(out, "Validation error: %v\n", err)
 			reopen, promptErr := promptReopen(scanner, out)
@@ -106,11 +105,6 @@ func runEdit(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, fo
 				continue
 			}
 			return err
-		}
-
-		compiled := settings.CompiledPermissions{
-			Allow: allowRules,
-			Deny:  denyRules,
 		}
 
 		rawCopy := copyRaw(raw)
@@ -129,13 +123,16 @@ func runEdit(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, fo
 		fmt.Fprintln(out)
 
 		if !force {
-			ok, err := promptOverwrite(scanner, out)
+			action, err := diff.Prompt(scanner, out, oldJSON, newJSON)
 			if err != nil {
 				return fmt.Errorf("prompt: %w", err)
 			}
-			if !ok {
+			switch action {
+			case diff.ActionNo:
 				fmt.Fprintln(out, "Aborted.")
 				return nil
+			case diff.ActionEdit:
+				continue
 			}
 		}
 
@@ -165,20 +162,6 @@ func promptReopen(s *bufio.Scanner, w io.Writer) (bool, error) {
 		return false, err
 	}
 	return false, nil // EOF → don't reopen
-}
-
-// promptOverwrite asks whether to overwrite the settings file.
-// Defaults to no on empty input or EOF.
-func promptOverwrite(s *bufio.Scanner, w io.Writer) (bool, error) {
-	fmt.Fprint(w, "Overwrite? [y/N] ")
-	if s.Scan() {
-		answer := strings.TrimSpace(s.Text())
-		return strings.ToLower(answer) == "y", nil
-	}
-	if err := s.Err(); err != nil {
-		return false, err
-	}
-	return false, nil // EOF → default No
 }
 
 func makeTempCopy(src string) (string, error) {
@@ -215,22 +198,6 @@ func copyFile(src, dst string) error {
 		mode = fi.Mode()
 	}
 	return os.WriteFile(dst, data, mode)
-}
-
-func validateAndBuild(yamlPath string) (allowRules, denyRules []string, err error) {
-	perms, err := loadPermissions(yamlPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	allowRules, err = buildRules(perms.Allow)
-	if err != nil {
-		return nil, nil, fmt.Errorf("expand allow rules: %w", err)
-	}
-	denyRules, err = buildRules(perms.Deny)
-	if err != nil {
-		return nil, nil, fmt.Errorf("expand deny rules: %w", err)
-	}
-	return allowRules, denyRules, nil
 }
 
 func copyRaw(m map[string]json.RawMessage) map[string]json.RawMessage {

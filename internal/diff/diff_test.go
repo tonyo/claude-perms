@@ -1,6 +1,7 @@
 package diff
 
 import (
+	"bufio"
 	"strings"
 	"testing"
 )
@@ -115,50 +116,118 @@ func TestDisplay_ContextLines(t *testing.T) {
 
 func TestPrompt_Yes(t *testing.T) {
 	for _, input := range []string{"y\n", "Y\n", "y \n", " Y\n"} {
-		r := strings.NewReader(input)
-		var sb strings.Builder
-		got, err := Prompt(r, &sb)
-		if err != nil {
-			t.Fatalf("Prompt(%q): unexpected error: %v", input, err)
-		}
-		if !got {
-			t.Errorf("Prompt(%q) = false, want true", input)
-		}
+		t.Run(input, func(t *testing.T) {
+			s := bufio.NewScanner(strings.NewReader(input))
+			var sb strings.Builder
+			got, err := Prompt(s, &sb, "old", "new")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != ActionYes {
+				t.Errorf("got %v, want ActionYes", got)
+			}
+		})
 	}
 }
 
 func TestPrompt_No(t *testing.T) {
+	// "nope" triggers invalid-input → hint, then EOF → ActionNo
 	for _, input := range []string{"n\n", "N\n", "\n", "no\n", "nope\n"} {
-		r := strings.NewReader(input)
-		var sb strings.Builder
-		got, err := Prompt(r, &sb)
-		if err != nil {
-			t.Fatalf("Prompt(%q): unexpected error: %v", input, err)
-		}
-		if got {
-			t.Errorf("Prompt(%q) = true, want false", input)
-		}
+		t.Run(input, func(t *testing.T) {
+			s := bufio.NewScanner(strings.NewReader(input))
+			var sb strings.Builder
+			got, err := Prompt(s, &sb, "old", "new")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != ActionNo {
+				t.Errorf("got %v, want ActionNo", got)
+			}
+		})
 	}
 }
 
 func TestPrompt_EOF(t *testing.T) {
-	r := strings.NewReader("") // immediate EOF
+	s := bufio.NewScanner(strings.NewReader("")) // immediate EOF
 	var sb strings.Builder
-	got, err := Prompt(r, &sb)
+	got, err := Prompt(s, &sb, "old", "new")
 	if err != nil {
 		t.Fatalf("unexpected error on EOF: %v", err)
 	}
-	if got {
-		t.Error("EOF should return false (default No)")
+	if got != ActionNo {
+		t.Errorf("EOF should return ActionNo, got %v", got)
 	}
 }
 
 func TestPrompt_PrintsQuestion(t *testing.T) {
-	r := strings.NewReader("n\n")
+	s := bufio.NewScanner(strings.NewReader("n\n"))
 	var sb strings.Builder
-	Prompt(r, &sb)
+	Prompt(s, &sb, "old", "new")
 	if !strings.Contains(sb.String(), "Overwrite?") {
 		t.Errorf("expected prompt text, got: %q", sb.String())
+	}
+}
+
+func TestPrompt_Redisplay(t *testing.T) {
+	// d redisplays the diff, then y confirms
+	s := bufio.NewScanner(strings.NewReader("d\ny\n"))
+	var sb strings.Builder
+	got, err := Prompt(s, &sb, "old-line", "new-line")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != ActionYes {
+		t.Errorf("expected ActionYes after d+y, got %v", got)
+	}
+	out := sb.String()
+	if !strings.Contains(out, "- old-line") {
+		t.Errorf("expected diff redisplay in output, got: %q", out)
+	}
+	if !strings.Contains(out, "+ new-line") {
+		t.Errorf("expected diff redisplay in output, got: %q", out)
+	}
+}
+
+func TestPrompt_Edit(t *testing.T) {
+	s := bufio.NewScanner(strings.NewReader("e\n"))
+	var sb strings.Builder
+	got, err := Prompt(s, &sb, "old", "new")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != ActionEdit {
+		t.Errorf("expected ActionEdit, got %v", got)
+	}
+}
+
+func TestPrompt_Help(t *testing.T) {
+	// ? shows help, then n aborts
+	s := bufio.NewScanner(strings.NewReader("?\nn\n"))
+	var sb strings.Builder
+	got, err := Prompt(s, &sb, "old", "new")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != ActionNo {
+		t.Errorf("expected ActionNo after ?+n, got %v", got)
+	}
+	if !strings.Contains(sb.String(), "redisplay diff") {
+		t.Errorf("expected help text in output, got: %q", sb.String())
+	}
+}
+
+func TestPrompt_InvalidThenYes(t *testing.T) {
+	s := bufio.NewScanner(strings.NewReader("wat\ny\n"))
+	var sb strings.Builder
+	got, err := Prompt(s, &sb, "old", "new")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != ActionYes {
+		t.Errorf("expected ActionYes after invalid+y, got %v", got)
+	}
+	if !strings.Contains(sb.String(), "type ? for help") {
+		t.Errorf("expected hint in output, got: %q", sb.String())
 	}
 }
 

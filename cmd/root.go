@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tonyo/claude-perms/internal/diff"
+	"github.com/tonyo/claude-perms/internal/editor"
 	"github.com/tonyo/claude-perms/internal/expand"
 	"github.com/tonyo/claude-perms/internal/macros"
 	"github.com/tonyo/claude-perms/internal/settings"
@@ -33,7 +34,7 @@ Pattern syntax:
 	}
 	root.AddCommand(newCompileCmd())
 	root.AddCommand(newCheckCmd())
-	root.AddCommand(newEditCmd())
+	root.AddCommand(newEditCmd(editor.Open))
 	return root
 }
 
@@ -48,7 +49,7 @@ func newCompileCmd() *cobra.Command {
 		Short: "Compile YAML into Claude Code settings.json",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCompile(cmd.InOrStdin(), cmd.OutOrStdout(), args[0], scope, output, dryRun, force)
+			return runCompile(cmd.InOrStdin(), cmd.OutOrStdout(), args[0], scope, output, dryRun, force, editor.Open)
 		},
 	}
 	cmd.Flags().StringVar(&scope, "scope", "user", "Settings scope: project, user, local")
@@ -68,24 +69,10 @@ type preparedPerms struct {
 	Deny  []taggedPattern
 }
 
-func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, dryRun, force bool) error {
-	perms, err := loadPermissions(yamlPath)
+func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, dryRun, force bool, openEditor func(string) error) error {
+	compiled, err := compileYAML(yamlPath)
 	if err != nil {
 		return err
-	}
-
-	allowRules, err := buildRules(perms.Allow)
-	if err != nil {
-		return fmt.Errorf("expand allow rules: %w", err)
-	}
-	denyRules, err := buildRules(perms.Deny)
-	if err != nil {
-		return fmt.Errorf("expand deny rules: %w", err)
-	}
-
-	compiled := settings.CompiledPermissions{
-		Allow: allowRules,
-		Deny:  denyRules,
 	}
 
 	if dryRun {
@@ -106,35 +93,99 @@ func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string,
 	if err != nil {
 		return fmt.Errorf("read settings: %w", err)
 	}
-
 	oldJSON := settings.CurrentPermissionsJSON(raw)
+	scanner := diff.NewScanner(in)
 
-	if err := settings.MergePermissions(raw, compiled); err != nil {
-		return fmt.Errorf("merge permissions: %w", err)
-	}
+	var tmpYAMLPath string
+	defer func() {
+		if tmpYAMLPath != "" {
+			os.Remove(tmpYAMLPath)
+		}
+	}()
 
-	newJSON := settings.CurrentPermissionsJSON(raw)
+	for {
+		rawCopy := copyRaw(raw)
+		if err := settings.MergePermissions(rawCopy, compiled); err != nil {
+			return fmt.Errorf("merge permissions: %w", err)
+		}
+		newJSON := settings.CurrentPermissionsJSON(rawCopy)
 
-	fmt.Fprintf(out, "\nChanges to permissions in %s:\n\n", targetPath)
-	diff.Display(oldJSON, newJSON, out)
-	fmt.Fprintln(out)
+		if force {
+			if err := settings.Write(targetPath, rawCopy); err != nil {
+				return fmt.Errorf("write settings: %w", err)
+			}
+			fmt.Fprintf(out, "Written to %s\n", targetPath)
+			return nil
+		}
 
-	if !force {
-		ok, err := diff.Prompt(in, out)
+		fmt.Fprintf(out, "\nChanges to permissions in %s:\n\n", targetPath)
+		diff.Display(oldJSON, newJSON, out)
+		fmt.Fprintln(out)
+
+		action, err := diff.Prompt(scanner, out, oldJSON, newJSON)
 		if err != nil {
 			return fmt.Errorf("prompt: %w", err)
 		}
-		if !ok {
+		switch action {
+		case diff.ActionYes:
+			if tmpYAMLPath != "" {
+				if err := copyFile(tmpYAMLPath, yamlPath); err != nil {
+					return fmt.Errorf("write %s: %w", yamlPath, err)
+				}
+			}
+			if err := settings.Write(targetPath, rawCopy); err != nil {
+				return fmt.Errorf("write settings: %w", err)
+			}
+			fmt.Fprintf(out, "Written to %s\n", targetPath)
+			return nil
+		case diff.ActionNo:
 			fmt.Fprintln(out, "Aborted.")
 			return nil
+		case diff.ActionEdit:
+			if tmpYAMLPath == "" {
+				p, err := makeTempCopy(yamlPath)
+				if err != nil {
+					return err
+				}
+				tmpYAMLPath = p
+			}
+			for {
+				if err := openEditor(tmpYAMLPath); err != nil {
+					return err
+				}
+				newCompiled, err := compileYAML(tmpYAMLPath)
+				if err != nil {
+					fmt.Fprintf(out, "Validation error: %v\n", err)
+					reopen, promptErr := promptReopen(scanner, out)
+					if promptErr != nil {
+						return promptErr
+					}
+					if reopen {
+						continue
+					}
+					return fmt.Errorf("compile after edit: %w", err)
+				}
+				compiled = newCompiled
+				break
+			}
 		}
 	}
+}
 
-	if err := settings.Write(targetPath, raw); err != nil {
-		return fmt.Errorf("write settings: %w", err)
+func compileYAML(yamlPath string) (settings.CompiledPermissions, error) {
+	perms, err := loadPermissions(yamlPath)
+	if err != nil {
+		return settings.CompiledPermissions{}, err
 	}
-	fmt.Fprintf(out, "Written to %s\n", targetPath)
-	return nil
+	allow, err := buildRules(perms.Allow)
+	if err != nil {
+		return settings.CompiledPermissions{}, fmt.Errorf("expand allow rules: %w", err)
+	}
+	deny, err := buildRules(perms.Deny)
+	if err != nil {
+		return settings.CompiledPermissions{}, fmt.Errorf("expand deny rules: %w", err)
+	}
+	return settings.CompiledPermissions{Allow: allow, Deny: deny}, nil
 }
 
 func newCheckCmd() *cobra.Command {
