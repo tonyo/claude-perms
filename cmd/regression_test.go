@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -51,5 +53,31 @@ func TestCompileDryRun_NoPermissions_NoPanic(t *testing.T) {
 	err := runCompile(strings.NewReader(""), &out, yaml, "project", "", true, false, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// Regression: compile prompted for overwrite even when the compiled output
+// matched what was already in settings.json (no-change case was missing).
+func TestCompile_NoChanges_ShortCircuits(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	yaml := writeTempYAML(t, validYAML)
+
+	// First compile populates settings.json.
+	if err := runCompile(strings.NewReader("y\n"), &strings.Builder{}, yaml, "project", settingsPath, false, false, nil); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	statBefore, _ := os.Stat(settingsPath)
+
+	// Second compile with the same YAML must not prompt.
+	var out strings.Builder
+	if err := runCompile(strings.NewReader(""), &out, yaml, "project", settingsPath, false, false, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "No changes.") {
+		t.Errorf("expected 'No changes.' in output, got: %s", out.String())
+	}
+	if s, _ := os.Stat(settingsPath); s.ModTime() != statBefore.ModTime() {
+		t.Error("settings.json should not have been rewritten")
 	}
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -84,16 +85,10 @@ func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string,
 		return nil
 	}
 
-	targetPath, err := resolveSettingsPath(scope, outputFlag)
+	targetPath, raw, oldJSON, err := loadSettings(scope, outputFlag)
 	if err != nil {
 		return err
 	}
-
-	raw, err := settings.ReadRaw(targetPath)
-	if err != nil {
-		return fmt.Errorf("read settings: %w", err)
-	}
-	oldJSON := settings.CurrentPermissionsJSON(raw)
 	scanner := diff.NewScanner(in)
 
 	var tmpYAMLPath string
@@ -104,18 +99,18 @@ func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string,
 	}()
 
 	for {
-		rawCopy := copyRaw(raw)
-		if err := settings.MergePermissions(rawCopy, compiled); err != nil {
-			return fmt.Errorf("merge permissions: %w", err)
+		rawCopy, newJSON, err := applyCompiled(raw, compiled)
+		if err != nil {
+			return err
 		}
-		newJSON := settings.CurrentPermissionsJSON(rawCopy)
+
+		if oldJSON == newJSON {
+			fmt.Fprintln(out, "No changes.")
+			return nil
+		}
 
 		if force {
-			if err := settings.Write(targetPath, rawCopy); err != nil {
-				return fmt.Errorf("write settings: %w", err)
-			}
-			fmt.Fprintf(out, "Written to %s\n", targetPath)
-			return nil
+			return writeSettings(targetPath, rawCopy, out)
 		}
 
 		fmt.Fprintf(out, "\nChanges to permissions in %s:\n\n", targetPath)
@@ -133,11 +128,7 @@ func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string,
 					return fmt.Errorf("write %s: %w", yamlPath, err)
 				}
 			}
-			if err := settings.Write(targetPath, rawCopy); err != nil {
-				return fmt.Errorf("write settings: %w", err)
-			}
-			fmt.Fprintf(out, "Written to %s\n", targetPath)
-			return nil
+			return writeSettings(targetPath, rawCopy, out)
 		case diff.ActionNo:
 			fmt.Fprintln(out, "Aborted.")
 			return nil
@@ -149,27 +140,72 @@ func runCompile(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string,
 				}
 				tmpYAMLPath = p
 			}
-			for {
-				if err := openEditor(tmpYAMLPath); err != nil {
-					return err
-				}
-				newCompiled, err := compileYAML(tmpYAMLPath)
-				if err != nil {
-					fmt.Fprintf(out, "Validation error: %v\n", err)
-					reopen, promptErr := promptReopen(scanner, out)
-					if promptErr != nil {
-						return promptErr
-					}
-					if reopen {
-						continue
-					}
-					return fmt.Errorf("compile after edit: %w", err)
-				}
-				compiled = newCompiled
-				break
+			newCompiled, err := openEditCompile(scanner, out, tmpYAMLPath, openEditor)
+			if err != nil {
+				return fmt.Errorf("compile after edit: %w", err)
 			}
+			compiled = newCompiled
 		}
 	}
+}
+
+func loadSettings(scope, outputFlag string) (string, map[string]json.RawMessage, string, error) {
+	targetPath, err := resolveSettingsPath(scope, outputFlag)
+	if err != nil {
+		return "", nil, "", err
+	}
+	raw, err := settings.ReadRaw(targetPath)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("read settings: %w", err)
+	}
+	return targetPath, raw, settings.CurrentPermissionsJSON(raw), nil
+}
+
+func applyCompiled(raw map[string]json.RawMessage, compiled settings.CompiledPermissions) (map[string]json.RawMessage, string, error) {
+	rawCopy := copyRaw(raw)
+	if err := settings.MergePermissions(rawCopy, compiled); err != nil {
+		return nil, "", fmt.Errorf("merge permissions: %w", err)
+	}
+	return rawCopy, settings.CurrentPermissionsJSON(rawCopy), nil
+}
+
+func writeSettings(targetPath string, rawCopy map[string]json.RawMessage, out io.Writer) error {
+	if err := settings.Write(targetPath, rawCopy); err != nil {
+		return fmt.Errorf("write settings: %w", err)
+	}
+	fmt.Fprintf(out, "Written to %s\n", targetPath)
+	return nil
+}
+
+// openEditCompile opens path in the editor then compiles it, re-prompting to
+// re-open on validation errors. Returns on the first successful compile.
+func openEditCompile(scanner *bufio.Scanner, out io.Writer, path string, openEditor func(string) error) (settings.CompiledPermissions, error) {
+	for {
+		if err := openEditor(path); err != nil {
+			return settings.CompiledPermissions{}, err
+		}
+		compiled, err := compileYAML(path)
+		if err != nil {
+			fmt.Fprintf(out, "Validation error: %v\n", err)
+			reopen, promptErr := promptReopen(scanner, out)
+			if promptErr != nil {
+				return settings.CompiledPermissions{}, promptErr
+			}
+			if reopen {
+				continue
+			}
+			return settings.CompiledPermissions{}, err
+		}
+		return compiled, nil
+	}
+}
+
+func copyRaw(m map[string]json.RawMessage) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 func compileYAML(yamlPath string) (settings.CompiledPermissions, error) {

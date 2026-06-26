@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tonyo/claude-perms/internal/diff"
-	"github.com/tonyo/claude-perms/internal/settings"
 )
 
 const emptyYAMLTemplate = `# claude-perms permissions file
@@ -87,43 +85,24 @@ func runEdit(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, fo
 		}
 	}
 
-	targetPath, err := resolveSettingsPath(scope, outputFlag)
+	targetPath, raw, oldJSON, err := loadSettings(scope, outputFlag)
 	if err != nil {
 		return err
 	}
-
-	raw, err := settings.ReadRaw(targetPath)
-	if err != nil {
-		return fmt.Errorf("read settings: %w", err)
-	}
-	oldJSON := settings.CurrentPermissionsJSON(raw)
 
 	// One scanner shared across all prompt reads to avoid double-buffering.
 	scanner := diff.NewScanner(in)
 
 	for {
-		if err := openEditor(tmpPath); err != nil {
-			return err
-		}
-
-		compiled, err := compileYAML(tmpPath)
+		compiled, err := openEditCompile(scanner, out, tmpPath, openEditor)
 		if err != nil {
-			fmt.Fprintf(out, "Validation error: %v\n", err)
-			reopen, promptErr := promptReopen(scanner, out)
-			if promptErr != nil {
-				return promptErr
-			}
-			if reopen {
-				continue
-			}
 			return err
 		}
 
-		rawCopy := copyRaw(raw)
-		if err := settings.MergePermissions(rawCopy, compiled); err != nil {
-			return fmt.Errorf("merge permissions: %w", err)
+		rawCopy, newJSON, err := applyCompiled(raw, compiled)
+		if err != nil {
+			return err
 		}
-		newJSON := settings.CurrentPermissionsJSON(rawCopy)
 
 		if oldJSON == newJSON {
 			tmpData, readErr := os.ReadFile(tmpPath)
@@ -166,11 +145,7 @@ func runEdit(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, fo
 		if isNew {
 			fmt.Fprintf(out, "Created %s\n", yamlPath)
 		}
-		if err := settings.Write(targetPath, rawCopy); err != nil {
-			return fmt.Errorf("write settings: %w", err)
-		}
-		fmt.Fprintf(out, "Written to %s\n", targetPath)
-		return nil
+		return writeSettings(targetPath, rawCopy, out)
 	}
 }
 
@@ -222,12 +197,4 @@ func copyFile(src, dst string) error {
 		mode = fi.Mode()
 	}
 	return os.WriteFile(dst, data, mode)
-}
-
-func copyRaw(m map[string]json.RawMessage) map[string]json.RawMessage {
-	out := make(map[string]json.RawMessage, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
 }
