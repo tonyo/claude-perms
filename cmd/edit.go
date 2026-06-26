@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,6 +76,17 @@ func runEdit(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, fo
 	}
 	defer os.Remove(tmpPath)
 
+	// Baseline YAML bytes for detecting formatting-only edits later.
+	var origYAML []byte
+	if isNew {
+		origYAML = []byte(emptyYAMLTemplate)
+	} else {
+		origYAML, err = os.ReadFile(yamlPath)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", yamlPath, err)
+		}
+	}
+
 	targetPath, err := resolveSettingsPath(scope, outputFlag)
 	if err != nil {
 		return err
@@ -114,6 +126,18 @@ func runEdit(in io.Reader, out io.Writer, yamlPath, scope, outputFlag string, fo
 		newJSON := settings.CurrentPermissionsJSON(rawCopy)
 
 		if oldJSON == newJSON {
+			tmpData, readErr := os.ReadFile(tmpPath)
+			if readErr == nil && !bytes.Equal(tmpData, origYAML) {
+				if err := copyFile(tmpPath, yamlPath); err != nil {
+					return fmt.Errorf("write %s: %w", yamlPath, err)
+				}
+				label := "Saved"
+				if isNew {
+					label = "Created"
+				}
+				fmt.Fprintf(out, "%s %s (no permission changes)\n", label, yamlPath)
+				return nil
+			}
 			fmt.Fprintln(out, "No changes.")
 			return nil
 		}

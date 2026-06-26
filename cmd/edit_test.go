@@ -253,6 +253,39 @@ func TestRunEdit_InvalidScope_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestRunEdit_YAMLReformatted_SavesYAMLOnly(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	// Pre-populate settings with validYAML's compiled output.
+	yamlPath := writeTempYAML(t, validYAML)
+	if err := runEdit(strings.NewReader("y\n"), &strings.Builder{}, yamlPath, "project", settingsPath, false, fakeEditor(validYAML)); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	settingsStatBefore, _ := os.Stat(settingsPath)
+
+	// "Reformat" the YAML — same permissions, different bytes.
+	reformatted := validYAML + "\n# reformatted\n"
+
+	var out strings.Builder
+	if err := runEdit(strings.NewReader(""), &out, yamlPath, "project", settingsPath, false, fakeEditor(reformatted)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// YAML should be updated to the reformatted version.
+	data, _ := os.ReadFile(yamlPath)
+	if string(data) != reformatted {
+		t.Errorf("expected reformatted YAML to be saved, got:\n%s", data)
+	}
+	// settings.json must not be rewritten.
+	if s, _ := os.Stat(settingsPath); s.ModTime() != settingsStatBefore.ModTime() {
+		t.Error("settings.json should not have been rewritten for formatting-only change")
+	}
+	if !strings.Contains(out.String(), "no permission changes") {
+		t.Errorf("expected 'no permission changes' in output, got: %s", out.String())
+	}
+}
+
 func TestRunEdit_PromptRedisplay(t *testing.T) {
 	// d redisplays the diff, then y confirms
 	dir := t.TempDir()
