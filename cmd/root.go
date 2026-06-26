@@ -46,11 +46,21 @@ func newCompileCmd() *cobra.Command {
 	var force bool
 
 	cmd := &cobra.Command{
-		Use:   "compile <perms.yaml>",
+		Use:   "compile [perms.yaml]",
 		Short: "Compile YAML into Claude Code settings.json",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCompile(cmd.InOrStdin(), cmd.OutOrStdout(), args[0], scope, output, dryRun, force, editor.Open)
+			yamlPath := ""
+			if len(args) == 1 {
+				yamlPath = args[0]
+			} else {
+				targetPath, err := resolveSettingsPath(scope, output)
+				if err != nil {
+					return err
+				}
+				yamlPath = filepath.Join(filepath.Dir(targetPath), "perms.yaml")
+			}
+			return runCompile(cmd.InOrStdin(), cmd.OutOrStdout(), yamlPath, scope, output, dryRun, force, editor.Open)
 		},
 	}
 	cmd.Flags().StringVar(&scope, "scope", "user", "Settings scope: project, user, local")

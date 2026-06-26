@@ -462,6 +462,34 @@ permissions:
 	}
 }
 
+// ── compile default YAML path ────────────────────────────────────────────────
+
+// compile with no positional arg should resolve the YAML path from --scope /
+// --output the same way edit does: <settings-dir>/perms.yaml.
+func TestCompileCmd_DefaultYAMLPath(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	yamlPath := filepath.Join(dir, "perms.yaml")
+
+	if err := os.WriteFile(yamlPath, []byte(validYAML), 0o644); err != nil {
+		t.Fatalf("write perms.yaml: %v", err)
+	}
+
+	root := NewRootCmd("test")
+	root.SetIn(strings.NewReader("y\n"))
+	var out strings.Builder
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"compile", "--output", settingsPath, "--force"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(settingsPath); err != nil {
+		t.Errorf("expected settings.json to be written: %v", err)
+	}
+}
+
 // ── expandPatterns error path ────────────────────────────────────────────────
 
 func TestExpandPatterns_InvalidPattern(t *testing.T) {
