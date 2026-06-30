@@ -235,14 +235,30 @@ func compileYAML(yamlPath string) (settings.CompiledPermissions, error) {
 }
 
 func newCheckCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "check <perms.yaml>",
+	var scope string
+	var output string
+
+	cmd := &cobra.Command{
+		Use:   "check [perms.yaml]",
 		Short: "Validate and preview expanded rules",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCheck(cmd.OutOrStdout(), cmd.ErrOrStderr(), args[0])
+			yamlPath := ""
+			if len(args) == 1 {
+				yamlPath = args[0]
+			} else {
+				targetPath, err := resolveSettingsPath(scope, output)
+				if err != nil {
+					return err
+				}
+				yamlPath = filepath.Join(filepath.Dir(targetPath), "perms.yaml")
+			}
+			return runCheck(cmd.OutOrStdout(), cmd.ErrOrStderr(), yamlPath)
 		},
 	}
+	cmd.Flags().StringVar(&scope, "scope", "user", "Settings scope: project, user, local")
+	cmd.Flags().StringVar(&output, "output", "", "Explicit output path (overrides --scope)")
+	return cmd
 }
 
 func runCheck(out, errOut io.Writer, yamlPath string) error {
